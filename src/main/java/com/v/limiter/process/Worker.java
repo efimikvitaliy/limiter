@@ -26,6 +26,7 @@ public class Worker {
     private final LimitsCheckingService limitsCheckingService;
     private final FundAcceptanceOutput fundAcceptanceOutput;
     private final AtomicBoolean pollScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean pollRequested = new AtomicBoolean(false);
 
     public Worker(
             FundRequestRepository repository,
@@ -45,16 +46,24 @@ public class Worker {
     }
 
     public void signal() {
-        log.debug("Received signal for worked");
+        log.debug("Received signal for work");
+        pollRequested.set(true);
+
         if (!pollScheduled.compareAndSet(false, true)) {
             return;
         }
 
         triggerExecutor.execute(() -> {
             try {
-                fillAvailableCapacity();
+                while (pollRequested.getAndSet(false)) {
+                    fillAvailableCapacity();
+                }
             } finally {
                 pollScheduled.set(false);
+
+                if (pollRequested.get()) {
+                    signal();
+                }
             }
         });
     }
